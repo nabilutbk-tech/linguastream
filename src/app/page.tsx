@@ -176,7 +176,7 @@ function HomeContent() {
           ))}
         </div>
       ) : (
-        <VideoGrid videos={filteredVideos} />
+        <VideoGrid videos={filteredVideos} onVideoDeleted={fetchVideos} />
       )}
     </div>
   );

@@ -68,3 +68,21 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const id = request.nextUrl.searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "Missing video id" }, { status: 400 });
+    }
+
+    await prisma.video.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete video:", error);
+    return NextResponse.json(
+      { error: "Failed to delete video" },
+      { status: 500 }
+    );
+  }
+}
