@@ -134,7 +134,7 @@ function WatchContent() {
 
   const videoSrc =
     video.sourceType === "telegram"
-      ? `/api/telegram/stream?fileId=${video.telegramFileId}`
+      ? `/api/telegram/stream?fileId=${video.telegramFileId}&videoId=${video.id}`
       : video.videoUrl || "";
 
   return (

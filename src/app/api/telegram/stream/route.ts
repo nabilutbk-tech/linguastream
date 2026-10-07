@@ -1,34 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const fileId = searchParams.get("fileId");
-
-  if (!fileId) {
-    return new NextResponse("Missing fileId", { status: 400 });
-  }
+  const videoId = searchParams.get("videoId");
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  if (!BOT_TOKEN) {
-    return new NextResponse("Bot token not configured", { status: 500 });
-  }
 
-  try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
-    );
-    const data = await res.json();
+  // 1. Coba lewat Telegram Bot API dulu (untuk video kecil < 20MB)
+  if (fileId && BOT_TOKEN) {
+    try {
+      const res = await fetch(
+        `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
+      );
+      const data = await res.json();
 
-    if (!data.ok) {
-      return new NextResponse("Failed to get file from Telegram", { status: 404 });
+      if (data.ok && data.result?.file_path) {
+        const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`;
+        return NextResponse.redirect(fileUrl);
+      }
+    } catch {
+      // Lanjut ke fallback jika file > 20MB
     }
-
-    const filePath = data.result.file_path;
-    const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
-
-    return NextResponse.redirect(fileUrl);
-  } catch (error) {
-    console.error("Telegram stream error:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
   }
+
+  // 2. Fallback untuk Video Besar (> 20MB) lewat Telegram Web Streamer
+  if (videoId) {
+    try {
+      const video = await prisma.video.findUnique({ where: { id: videoId } });
+      if (video && video.telegramChatId && video.telegramMessageId) {
+        let channelName = video.telegramChatId.replace("-100", "");
+
+        // Ambil link embed publik Telegram
+        const embedUrl = `https://t.me/c/${channelName}/${video.telegramMessageId}?embed=1`;
+        const embedRes = await fetch(embedUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        });
+
+        const html = await embedRes.text();
+
+        // Cari URL video stream asli dari Telegram CDN
+        const match =
+          html.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+          html.match(/src=["'](https:\/\/[^"']+\.mp4[^"']*)["']/i);
+
+        if (match && match[1]) {
+          return NextResponse.redirect(match[1]);
+        }
+      }
+    } catch (err) {
+      console.error("Embed stream error:", err);
+    }
+  }
+
+  return new NextResponse("Video file unavailable or exceeds limit", { status: 404 });
 }

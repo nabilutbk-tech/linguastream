@@ -1,13 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "sqlite"
-  url      = env("libsql://linguastream-db-ghibran7447.aws-ap-southeast-2.turso.io?authToken=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTEzNzMxNTgsImlkIjoiMDFhMTE2MjgtZjIwMS03YTBiLWEwYzYtZjdmODk1YzkwYmJhIiwia2lkIjoibWR2MVdUc3dJVzNmaEVmaWhRRkxhYmkzMWRxSzNINUh3ZXB4cGlnbjMzSSIsInJpZCI6IjhhMWJiMmZlLTk4MmItNDMxMi05MDIyLThkMjI4MDIxYzM3MSJ9.ZiYO7-6g-huDVFq2hm3-yr85XmU3FwTvLgOXad426jXijl3j7JGDtz70MDY7APLUTtxB40KGYd1SKpnPrA6mAw")
+  url      = env("DATABASE_URL")
 }
-
 model Video {
   id          String   @id @default(cuid())
   title       String
