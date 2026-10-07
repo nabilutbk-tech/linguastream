@@ -4,18 +4,17 @@ import { parseSRT, parseASS } from "@/lib/subtitle-parser";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } 
 ) {
   try {
-    const sub = await prisma.subtitle.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+    const sub = await prisma.subtitle.findUnique({ where: { id } });
     if (!sub) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Jika sudah pernah diparsing dan tersimpan di database
     if (sub.content && sub.content !== "[]") {
       return NextResponse.json({ entries: JSON.parse(sub.content) });
     }
 
-    // Jika belum diparsing dan sumbernya dari Telegram
     if (sub.sourceType === "telegram" && sub.telegramFileId) {
       const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
       const getFileRes = await fetch(
@@ -31,7 +30,6 @@ export async function GET(
         const entries =
           sub.format === "ass" ? parseASS(textContent) : parseSRT(textContent);
 
-        // Update database dengan hasil parsing agar tidak mendownload lagi kedepannya
         await prisma.subtitle.update({
           where: { id: sub.id },
           data: { content: JSON.stringify(entries) },
