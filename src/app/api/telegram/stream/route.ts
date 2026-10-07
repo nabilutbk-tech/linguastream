@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const videoId = searchParams.get("videoId");
-  const fileId = searchParams.get("fileId");
+  const videoId = request.nextUrl.searchParams.get("videoId");
+  const fileId = request.nextUrl.searchParams.get("fileId");
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-  // 1. Coba lewat Telegram Bot API getFile (Untuk file kecil < 20MB)
+  // 1. Coba lewat Telegram Bot API getFile (< 20MB)
   if (fileId && BOT_TOKEN) {
     try {
       const res = await fetch(
@@ -24,7 +23,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. Fallback untuk Video Besar (> 20MB) dari Telegram Public Embed
+  // 2. Telegram Web Embed Extractor untuk Video Besar (> 20MB)
   if (videoId) {
     try {
       const video = await prisma.video.findUnique({ where: { id: videoId } });
@@ -52,21 +51,23 @@ export async function GET(request: NextRequest) {
 
         const candidateUrls: string[] = [];
         if (username) {
-          candidateUrls.push(`https://t.me/${username}/${video.telegramMessageId}?embed=1`);
+          candidateUrls.push(`https://t.me/${username}/${video.telegramMessageId}?embed=1&single=1`);
         }
         if (video.telegramChatId) {
           const cleanId = video.telegramChatId.replace("-100", "");
-          candidateUrls.push(`https://t.me/c/${cleanId}/${video.telegramMessageId}?embed=1`);
+          candidateUrls.push(`https://t.me/c/${cleanId}/${video.telegramMessageId}?embed=1&single=1`);
         }
+
+        // Gunakan User-Agent TelegramBot agar bypass CAPTCHA & tidak diblokir
+        const headers = {
+          "User-Agent": "TelegramBot (like TwitterBot)",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.5",
+        };
 
         for (const embedUrl of candidateUrls) {
           try {
-            const res = await fetch(embedUrl, {
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              },
-            });
+            const res = await fetch(embedUrl, { headers, redirect: "follow" });
             const html = await res.text();
 
             const match =
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
               html.match(/<source[^>]+src=["']([^"']+)["']/i) ||
               html.match(/src=["'](https:\/\/[^"']+\.(?:mp4|mkv|webm|mov)[^"']*)["']/i) ||
               html.match(/(https:\/\/v\.t\.me\/watch\/[^\s"'<]+)/) ||
-              html.match(/(https:\/\/[^"']+\.usercontent\.telegram\.org[^\s"'<]+)/);
+              html.match(/(https:\/\/[^"']+\.usercontent\.telegram\.org\/[^\s"'<]+)/);
 
             if (match && match[1]) {
               const mediaUrl = match[1].replace(/&amp;/g, "&");
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
   }
 
   return new NextResponse(
-    "Video stream unavailable. Make sure the video on Telegram is in .mp4 format.",
+    "Video stream unavailable. Ensure channel is Public and video was posted as native video.",
     { status: 404 }
   );
 }

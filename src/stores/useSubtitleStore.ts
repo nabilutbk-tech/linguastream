@@ -12,7 +12,6 @@ export interface SubtitleTrack {
 }
 
 interface SubtitleStore {
-  // Slot tetap: index 0 = Subtitle 1 (Primary), index 1 = Subtitle 2 (Secondary)
   primaryTrack: SubtitleTrack | null;
   secondaryTrack: SubtitleTrack | null;
 
@@ -21,15 +20,15 @@ interface SubtitleStore {
   offsetPrimary: number;
   offsetSecondary: number;
 
-  // Kompatibilitas komponen lama (tracks + activeTrackIds)
   tracks: SubtitleTrack[];
   activeTrackIds: string[];
 
   setSlotTrack: (slot: 0 | 1, track: SubtitleTrack | null) => void;
+  swapSlots: () => void;
   toggleTrack: (id: string) => void;
   removeTrack: (id: string) => void;
   clearTracks: () => void;
-  addTrack: (track: SubtitleTrack) => void; // legacy fallback
+  addTrack: (track: SubtitleTrack) => void;
 
   setPrimaryStyle: (style: Partial<SubtitleStyle>) => void;
   setSecondaryStyle: (style: Partial<SubtitleStyle>) => void;
@@ -98,7 +97,14 @@ export const useSubtitleStore = create<SubtitleStore>()(
           return { primaryTrack, secondaryTrack, tracks, activeTrackIds };
         }),
 
-      // Legacy: isi slot kosong pertama
+      swapSlots: () =>
+        set((state) => {
+          const primaryTrack = state.secondaryTrack;
+          const secondaryTrack = state.primaryTrack;
+          const { tracks, activeTrackIds } = deriveList(primaryTrack, secondaryTrack);
+          return { primaryTrack, secondaryTrack, tracks, activeTrackIds };
+        }),
+
       addTrack: (track) =>
         set((state) => {
           if (!state.primaryTrack) {

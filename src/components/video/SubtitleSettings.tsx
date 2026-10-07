@@ -16,13 +16,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/native-select";
 import { RangeInput } from "@/components/ui/range-input";
-import { Settings, Palette, Type, Clock, Trash2 } from "lucide-react";
+import { Settings, Palette, Type, Clock, Trash2, ArrowUpDown } from "lucide-react";
 import { SubtitleStyle } from "@/types";
 import { cn } from "@/lib/utils";
 
 const fontFamilies = [
   { value: "system-ui", label: "System (default)" },
-  { value: "'Noto Sans JP', sans-serif", label: "Noto Sans JP (cocok untuk Jepang)" },
+  { value: "'Noto Sans JP', sans-serif", label: "Noto Sans JP (Japanese)" },
   { value: "monospace", label: "Monospace" },
 ];
 
@@ -84,7 +84,6 @@ function StyleEditor({
 
   return (
     <div className="space-y-5">
-      {/* Preview */}
       <div className="flex justify-center rounded-lg bg-gradient-to-br from-slate-600 to-slate-800 p-5">
         <span
           className="subtitle-text rounded-md px-3 py-1 text-center"
@@ -99,10 +98,9 @@ function StyleEditor({
         </span>
       </div>
 
-      {/* Font size */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">
-          Ukuran teks: {style.fontSize}px
+          Font Size: {style.fontSize}px
         </Label>
         <RangeInput
           value={style.fontSize}
@@ -110,28 +108,25 @@ function StyleEditor({
           max={48}
           step={1}
           onChange={(v) => onChange({ fontSize: v })}
-          aria-label="Ukuran teks subtitle"
         />
       </div>
 
-      {/* Colors */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <ColorField
-          label="Warna teks"
+          label="Text Color"
           value={style.fontColor}
           onChange={(v) => onChange({ fontColor: v })}
         />
         <ColorField
-          label="Warna latar teks"
+          label="Background Color"
           value={style.bgColor}
           onChange={(v) => onChange({ bgColor: v })}
         />
       </div>
 
-      {/* Background opacity */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">
-          Transparansi latar: {Math.round(style.bgOpacity * 100)}%
+          BG Opacity: {Math.round(style.bgOpacity * 100)}%
         </Label>
         <RangeInput
           value={style.bgOpacity}
@@ -139,13 +134,11 @@ function StyleEditor({
           max={1}
           step={0.05}
           onChange={(v) => onChange({ bgOpacity: v })}
-          aria-label="Transparansi latar subtitle"
         />
       </div>
 
-      {/* Font family */}
       <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Jenis font</Label>
+        <Label className="text-xs text-muted-foreground">Font Family</Label>
         <NativeSelect
           value={style.fontFamily}
           onChange={(e) => onChange({ fontFamily: e.target.value })}
@@ -158,12 +151,11 @@ function StyleEditor({
         </NativeSelect>
       </div>
 
-      {/* Sync */}
       <div className="space-y-3 border-t pt-4">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock className="h-3.5 w-3.5 text-primary" />
-            Geser waktu subtitle
+            Sync Offset
           </Label>
           <span className="font-mono text-sm font-bold">
             {offset > 0 ? "+" : ""}
@@ -213,12 +205,7 @@ function StyleEditor({
           max={30}
           step={0.1}
           onChange={changeOffset}
-          aria-label="Geser waktu subtitle"
         />
-        <p className="text-xs text-muted-foreground">
-          <b>Minus (−)</b> = subtitle muncul lebih cepat. <b>Plus (+)</b> =
-          subtitle muncul lebih lambat.
-        </p>
       </div>
     </div>
   );
@@ -227,7 +214,7 @@ function StyleEditor({
 export function SubtitleSettings() {
   const [tab, setTab] = useState<"primary" | "secondary">("primary");
 
-    const {
+  const {
     primaryTrack,
     secondaryTrack,
     activeTrackIds,
@@ -237,6 +224,7 @@ export function SubtitleSettings() {
     offsetSecondary,
     toggleTrack,
     removeTrack,
+    swapSlots,
     setPrimaryStyle,
     setSecondaryStyle,
     setOffsetPrimary,
@@ -244,8 +232,8 @@ export function SubtitleSettings() {
   } = useSubtitleStore();
 
   const slotTracks = [
-    primaryTrack ? { track: primaryTrack, slot: 0 as const, tag: "Sub 1" } : null,
-    secondaryTrack ? { track: secondaryTrack, slot: 1 as const, tag: "Sub 2" } : null,
+    primaryTrack ? { track: primaryTrack, slot: 0 as const, tag: "Sub 1 (Bottom)" } : null,
+    secondaryTrack ? { track: secondaryTrack, slot: 1 as const, tag: "Sub 2 (Top)" } : null,
   ].filter(Boolean) as {
     track: NonNullable<typeof primaryTrack>;
     slot: 0 | 1;
@@ -268,12 +256,24 @@ export function SubtitleSettings() {
         </SheetHeader>
 
         <div className="space-y-6 px-4 pb-10">
-          {/* Track list */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">
-              Subtitle yang dimuat (maks. 2)
-            </Label>
-                        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Loaded Subtitles</Label>
+              {primaryTrack && secondaryTrack && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={swapSlots}
+                >
+                  <ArrowUpDown className="h-3 w-3 text-primary" />
+                  Swap Positions (Sub 1 ⇄ Sub 2)
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-2">
               {slotTracks.map(({ track, tag }) => {
                 const isActive = activeTrackIds.includes(track.id);
                 return (
@@ -299,7 +299,6 @@ export function SubtitleSettings() {
                       />
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">
                         {track.label}
-                        {track.fileName ? ` — ${track.fileName}` : ""}
                       </span>
                       <Badge variant="secondary" className="shrink-0 text-[10px]">
                         {tag}
@@ -319,7 +318,7 @@ export function SubtitleSettings() {
               })}
               {slotTracks.length === 0 && (
                 <p className="py-4 text-center text-sm text-muted-foreground">
-                  Belum ada subtitle yang dimuat
+                  No subtitles loaded
                 </p>
               )}
             </div>
@@ -327,7 +326,6 @@ export function SubtitleSettings() {
 
           <Separator />
 
-          {/* Tab buatan sendiri */}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
               {(["primary", "secondary"] as const).map((key) => (
@@ -342,15 +340,10 @@ export function SubtitleSettings() {
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {key === "primary" ? "Subtitle 1" : "Subtitle 2"}
+                  {key === "primary" ? "Subtitle 1 Style" : "Subtitle 2 Style"}
                 </button>
               ))}
             </div>
-
-            <h3 className="flex items-center gap-2 text-sm font-medium">
-              <Type className="h-4 w-4 text-primary" />
-              Tampilan {tab === "primary" ? "Subtitle 1 (baris bawah)" : "Subtitle 2 (baris atas)"}
-            </h3>
 
             {tab === "primary" ? (
               <StyleEditor
@@ -358,7 +351,7 @@ export function SubtitleSettings() {
                 onChange={setPrimaryStyle}
                 offset={offsetPrimary}
                 onOffsetChange={setOffsetPrimary}
-                sampleText="Contoh subtitle 1 / サンプル"
+                sampleText="Sample Subtitle 1 / サンプル"
               />
             ) : (
               <StyleEditor
@@ -366,7 +359,7 @@ export function SubtitleSettings() {
                 onChange={setSecondaryStyle}
                 offset={offsetSecondary}
                 onOffsetChange={setOffsetSecondary}
-                sampleText="Contoh subtitle 2 / サンプル"
+                sampleText="Sample Subtitle 2 / サンプル"
               />
             )}
           </div>
