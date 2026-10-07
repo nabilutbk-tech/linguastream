@@ -10,18 +10,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Video Post
+    // 1. JIKA MEMPOSTING VIDEO
     if (message.video) {
       const video = message.video;
-      const caption = message.caption || "Untitled Video";
+      const caption = (message.caption || "").toLowerCase();
 
-      let language = "en";
-      if (caption.includes("#ja") || caption.includes("#japanese")) language = "ja";
-      if (caption.includes("#id") || caption.includes("#indonesian")) language = "id";
+      // Deteksi bahasa dari hashtag caption
+      let language = "en"; // default English
+      if (caption.includes("#ja") || caption.includes("#jpn") || caption.includes("#japanese")) {
+        language = "ja";
+      } else if (caption.includes("#id") || caption.includes("#ind") || caption.includes("#indonesian")) {
+        language = "id";
+      } else if (caption.includes("#en") || caption.includes("#eng") || caption.includes("#english")) {
+        language = "en";
+      }
+
+      // Bersihkan hashtag dari Judul Video
+      const cleanTitle = (message.caption || "Untitled Video")
+        .replace(/#\w+/g, "")
+        .trim() || "Untitled Video";
 
       await prisma.video.create({
         data: {
-          title: caption.replace(/#\w+/g, "").trim() || "Untitled Video",
+          title: cleanTitle,
           sourceType: "telegram",
           telegramFileId: video.file_id,
           telegramChatId: String(message.chat.id),
@@ -32,7 +43,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Subtitle File Post (.srt/.ass)
+    // 2. JIKA MEMBALAS (REPLY) VIDEO DENGAN FILE SUBTITLE (.srt / .ass)
     if (message.document) {
       const doc = message.document;
       const fileName = doc.file_name || "";
@@ -51,21 +62,27 @@ export async function POST(request: NextRequest) {
           });
 
           if (existingVideo) {
-            const caption = message.caption || "";
+            const caption = (message.caption || "").toLowerCase();
             let subLanguage = "en";
-            if (caption.includes("#ja") || caption.includes("#japanese")) subLanguage = "ja";
-            if (caption.includes("#id") || caption.includes("#indonesian")) subLanguage = "id";
+            if (caption.includes("#ja") || caption.includes("#jpn") || caption.includes("#japanese")) {
+              subLanguage = "ja";
+            } else if (caption.includes("#id") || caption.includes("#ind") || caption.includes("#indonesian")) {
+              subLanguage = "id";
+            } else if (caption.includes("#en") || caption.includes("#eng") || caption.includes("#english")) {
+              subLanguage = "en";
+            }
+
+            const labelMap: Record<string, string> = {
+              ja: "Japanese",
+              id: "Indonesian",
+              en: "English",
+            };
 
             await prisma.subtitle.create({
               data: {
                 videoId: existingVideo.id,
                 language: subLanguage,
-                label:
-                  subLanguage === "ja"
-                    ? "Japanese"
-                    : subLanguage === "id"
-                    ? "Indonesian"
-                    : "English",
+                label: labelMap[subLanguage] || "English",
                 sourceType: "telegram",
                 telegramFileId: doc.file_id,
                 content: "[]",
