@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       if (video && video.telegramMessageId) {
         let username = video.telegramChatUsername;
 
-        // Jika video lama durasinya belum punya username di DB, panggil getChat
+        // Auto-fetch username jika belum tersimpan di DB
         if (!username && video.telegramChatId && BOT_TOKEN) {
           try {
             const chatRes = await fetch(
@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
             const chatData = await chatRes.json();
             if (chatData.ok && chatData.result?.username) {
               username = chatData.result.username;
-              // Simpan ke DB agar selanjutnya instant
               await prisma.video.update({
                 where: { id: video.id },
                 data: { telegramChatUsername: username },
@@ -52,35 +51,48 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        const candidateUrls: string[] = [];
         if (username) {
-          const embedUrl = `https://t.me/${username}/${video.telegramMessageId}?embed=1`;
-          const res = await fetch(embedUrl, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            },
-          });
-          const html = await res.text();
+          candidateUrls.push(`https://t.me/${username}/${video.telegramMessageId}?embed=1`);
+        }
+        if (video.telegramChatId) {
+          const cleanId = video.telegramChatId.replace("-100", "");
+          candidateUrls.push(`https://t.me/c/${cleanId}/${video.telegramMessageId}?embed=1`);
+        }
 
-          // Ekstrak URL Video CDN dari HTML Embed Telegram
-          const match =
-            html.match(/src=["'](https:\/\/[^"']+\.(?:mp4|mkv|webm)[^"']*)["']/i) ||
-            html.match(/<video[^>]+src=["']([^"']+)["']/i) ||
-            html.match(/(https:\/\/v\.t\.me\/watch\/[^\s"'<]+)/) ||
-            html.match(/(https:\/\/[^"']+\.usercontent\.telegram\.org[^\s"'<]+)/);
+        for (const embedUrl of candidateUrls) {
+          try {
+            const res = await fetch(embedUrl, {
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              },
+            });
+            const html = await res.text();
 
-          if (match && match[1]) {
-            return NextResponse.redirect(match[1]);
+            const match =
+              html.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+              html.match(/<source[^>]+src=["']([^"']+)["']/i) ||
+              html.match(/src=["'](https:\/\/[^"']+\.(?:mp4|mkv|webm|mov)[^"']*)["']/i) ||
+              html.match(/(https:\/\/v\.t\.me\/watch\/[^\s"'<]+)/) ||
+              html.match(/(https:\/\/[^"']+\.usercontent\.telegram\.org[^\s"'<]+)/);
+
+            if (match && match[1]) {
+              const mediaUrl = match[1].replace(/&amp;/g, "&");
+              return NextResponse.redirect(mediaUrl);
+            }
+          } catch (e) {
+            console.error("Embed fetch error:", e);
           }
         }
       }
     } catch (err) {
-      console.error("Embed stream error:", err);
+      console.error("Stream route error:", err);
     }
   }
 
   return new NextResponse(
-    "Video unavailable. Make sure the Telegram channel is PUBLIC with a username link.",
+    "Video unavailable. Please send the video as a Native Video (not as File/Document) in Telegram.",
     { status: 404 }
   );
 }
