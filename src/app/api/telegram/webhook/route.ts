@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    // Tangkap pesan dari pesan pribadi maupun Channel Post
     const msg = body.message || body.channel_post;
 
     if (!msg) {
@@ -13,21 +12,19 @@ export async function POST(request: NextRequest) {
 
     const caption = (msg.caption || "").toLowerCase();
 
-    // Fungsi pembantu deteksi hashtag bahasa
     const detectLang = (str: string) => {
       if (str.includes("#ja") || str.includes("#jpn") || str.includes("#japanese")) return "ja";
       if (str.includes("#id") || str.includes("#ind") || str.includes("#indonesian")) return "id";
       return "en";
     };
 
-    // Cek apakah lampiran adalah Video biasa ATAU File Dokumen Video (.mkv, .mp4, .avi, dll)
     const isNativeVideo = !!msg.video;
     const isVideoDocument =
       msg.document &&
       (msg.document.mime_type?.startsWith("video/") ||
         /\.(mkv|mp4|avi|mov|webm)$/i.test(msg.document.file_name || ""));
 
-    // 1. JIKA POSTINGAN ADALAH VIDEO (BAIK NATIVE MAUPUN DOKUMEN FILE)
+    // 1. JIKA POSTINGAN ADALAH VIDEO
     if (isNativeVideo || isVideoDocument) {
       const fileId = isNativeVideo ? msg.video.file_id : msg.document.file_id;
       const duration = isNativeVideo ? msg.video.duration : null;
@@ -41,6 +38,7 @@ export async function POST(request: NextRequest) {
           sourceType: "telegram",
           telegramFileId: fileId,
           telegramChatId: String(msg.chat.id),
+          telegramChatUsername: msg.chat.username || null,
           telegramMessageId: msg.message_id,
           duration,
           language,
@@ -50,7 +48,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, status: "Video saved" });
     }
 
-    // 2. JIKA REPLY VIDEO DENGAN FILE SUBTITLE (.srt / .ass / .ssa)
+    // 2. JIKA REPLY VIDEO DENGAN FILE SUBTITLE
     if (msg.document) {
       const doc = msg.document;
       const fileName = doc.file_name || "";

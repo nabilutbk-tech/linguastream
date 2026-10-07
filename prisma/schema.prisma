@@ -18,6 +18,7 @@ model Video {
   // Field khusus Telegram
   telegramFileId    String?
   telegramChatId    String?
+  telegramChatUsername String?
   telegramMessageId Int?
   
   // Field khusus Local / Hosted URL

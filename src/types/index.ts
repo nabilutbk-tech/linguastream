@@ -65,6 +65,7 @@ export interface VideoInfo {
   thumbnailUrl?: string;
   telegramFileId?: string;
   telegramChatId?: string;
+  telegramChatUsername?: string;
   telegramMessageId?: number;
   duration?: number;
   language: string;
