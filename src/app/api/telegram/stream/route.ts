@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-  // 1. Coba lewat Telegram Bot API getFile (Untuk file kecil < 20MB)
+  // 1. Coba lewat Telegram Bot API getFile
   if (fileId && BOT_TOKEN) {
     try {
       const res = await fetch(
@@ -20,11 +20,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(fileUrl);
       }
     } catch {
-      // Lanjut ke fallback jika > 20MB
+      // Continue to fallback
     }
   }
 
-  // 2. Fallback untuk Video Besar (> 20MB) dari Telegram Public Embed
+  // 2. Fallback untuk Video Besar dari Telegram Public Embed
   if (videoId) {
     try {
       const video = await prisma.video.findUnique({ where: { id: videoId } });
@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
       if (video && video.telegramMessageId) {
         let username = video.telegramChatUsername;
 
-        // Auto-fetch username jika belum tersimpan di DB
         if (!username && video.telegramChatId && BOT_TOKEN) {
           try {
             const chatRes = await fetch(
@@ -85,6 +84,9 @@ export async function GET(request: NextRequest) {
             console.error("Embed fetch error:", e);
           }
         }
+
+        // HAPUS DARI DATABASE OTOMATIS JIKA VIDEO SUDAH TIDAK DITEMUKAN DI TELEGRAM
+        await prisma.video.delete({ where: { id: video.id } }).catch(() => {});
       }
     } catch (err) {
       console.error("Stream route error:", err);
@@ -92,7 +94,7 @@ export async function GET(request: NextRequest) {
   }
 
   return new NextResponse(
-    "Video unavailable. Please send the video as a Native Video (not as File/Document) in Telegram.",
+    "Video unavailable or deleted from Telegram channel.",
     { status: 404 }
   );
 }

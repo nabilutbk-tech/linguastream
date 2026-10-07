@@ -11,23 +11,20 @@ model Video {
   id          String   @id @default(cuid())
   title       String
   description String?
+  series      String?  // Nama Folder / Series (contoh: "Boruto")
   
-  // "local" atau "telegram"
   sourceType  String   @default("telegram")
   
-  // Field khusus Telegram
-  telegramFileId    String?
-  telegramChatId    String?
+  telegramFileId       String?
+  telegramChatId       String?
   telegramChatUsername String?
-  telegramMessageId Int?
+  telegramMessageId    Int?
   
-  // Field khusus Local / Hosted URL
   videoUrl     String?
   thumbnailUrl String?
   
-  // Metadata
-  duration    Int?     // dalam detik
-  language    String   @default("en") // en, ja, id
+  duration    Int?     
+  language    String   @default("en") 
   category    String?
   
   subtitles   Subtitle[]

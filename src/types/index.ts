@@ -60,6 +60,7 @@ export interface VideoInfo {
   id: string;
   title: string;
   description?: string;
+  series?: string; // Tambahkan ini
   sourceType: 'local' | 'telegram';
   videoUrl?: string;
   thumbnailUrl?: string;

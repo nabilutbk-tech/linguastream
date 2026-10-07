@@ -10,13 +10,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const caption = (msg.caption || "").toLowerCase();
+    const caption = msg.caption || msg.document?.file_name || "";
+    const lowerCaption = caption.toLowerCase();
 
+    // Deteksi Bahasa
     const detectLang = (str: string) => {
       if (str.includes("#ja") || str.includes("#jpn") || str.includes("#japanese")) return "ja";
       if (str.includes("#id") || str.includes("#ind") || str.includes("#indonesian")) return "id";
       return "en";
     };
+
+    // Deteksi Nama Folder/Series dari [Nama Folder]
+    const seriesMatch = caption.match(/\[(.*?)\]/);
+    const seriesName = seriesMatch ? seriesMatch[1].trim() : null;
+
+    // Bersihkan Judul dari [Folder] dan #hashtag
+    const cleanTitle = caption
+      .replace(/\[.*?\]/g, "")
+      .replace(/#\w+/g, "")
+      .trim() || "Untitled Video";
 
     const isNativeVideo = !!msg.video;
     const isVideoDocument =
@@ -28,18 +40,44 @@ export async function POST(request: NextRequest) {
     if (isNativeVideo || isVideoDocument) {
       const fileId = isNativeVideo ? msg.video.file_id : msg.document.file_id;
       const duration = isNativeVideo ? msg.video.duration : null;
-      const rawTitle = msg.caption || msg.document?.file_name || "Untitled Video";
-      const cleanTitle = rawTitle.replace(/#\w+/g, "").trim() || "Untitled Video";
-      const language = detectLang(caption);
+      const language = detectLang(lowerCaption);
+
+      // Ambil Thumbnail Otomatis buatan Telegram
+      let thumbFileId = null;
+      if (isNativeVideo && msg.video.thumbnail) {
+        thumbFileId = msg.video.thumbnail.file_id;
+      } else if (msg.document?.thumbnail) {
+        thumbFileId = msg.document.thumbnail.file_id;
+      }
+
+      const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+      let thumbnailUrl = null;
+
+      // Ambil URL Gambar Thumbnail dari Telegram
+      if (thumbFileId && BOT_TOKEN) {
+        try {
+          const thumbRes = await fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${thumbFileId}`
+          );
+          const thumbData = await thumbRes.json();
+          if (thumbData.ok && thumbData.result?.file_path) {
+            thumbnailUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${thumbData.result.file_path}`;
+          }
+        } catch (e) {
+          console.error("Failed to fetch thumbnail", e);
+        }
+      }
 
       await prisma.video.create({
         data: {
           title: cleanTitle,
+          series: seriesName,
           sourceType: "telegram",
           telegramFileId: fileId,
           telegramChatId: String(msg.chat.id),
           telegramChatUsername: msg.chat.username || null,
           telegramMessageId: msg.message_id,
+          thumbnailUrl,
           duration,
           language,
         },
@@ -64,7 +102,7 @@ export async function POST(request: NextRequest) {
           });
 
           if (existingVideo) {
-            const subLanguage = detectLang(caption);
+            const subLanguage = detectLang(lowerCaption);
             const labelMap: Record<string, string> = {
               ja: "Japanese",
               id: "Indonesian",
