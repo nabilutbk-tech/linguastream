@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  
+  // "local" atau "telegram"
+  sourceType  String   @default("telegram")
+  
+  // Field khusus Telegram
+  telegramFileId    String?
+  telegramChatId    String?
+  telegramMessageId Int?
+  
+  // Field khusus Local / Hosted URL
+  videoUrl     String?
+  thumbnailUrl String?
+  
+  // Metadata
+  duration    Int?     // dalam detik
+  language    String   @default("en") // en, ja, id
+  category    String?
+  
+  subtitles   Subtitle[]
+  vocabulary  Vocabulary[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Subtitle {
+  id          String   @id @default(cuid())
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  language    String   // en, ja, id
+  label       String   // "English", "Japanese", "Indonesian"
+  
+  // Source
+  sourceType     String   @default("file") // "file" atau "telegram"
+  fileUrl        String?
+  telegramFileId String?
+  
+  // Konten subtitle yang sudah di-parse disimpan sebagai string JSON
+  content     String
+  format      String   @default("srt") // srt atau ass
+  
+  createdAt   DateTime @default(now())
+}
+
+model Vocabulary {
+  id          String   @id @default(cuid())
+  videoId     String?
+  video       Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  
+  word        String
+  reading     String?  // Untuk Furigana Kanji Jepang
+  meaning     String
+  context     String?  // Kalimat asal dari subtitle
+  language    String   // en, ja, id
+  
+  // Anki & Quiz metadata
+  tags        String?
+  notes       String?
+  mastered    Boolean  @default(false)
+  reviewCount Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model QuizResult {
+  id          String   @id @default(cuid())
+  videoId     String?
+  quizType    String   // "multiple_choice", "fill_blank"
+  language    String
+  score       Int
+  total       Int
+  answers     String   // Simpan jawaban JSON
+  createdAt   DateTime @default(now())
+}
