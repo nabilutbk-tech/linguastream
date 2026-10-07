@@ -1,16 +1,17 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, Suspense } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { SubtitleSettings } from "@/components/video/SubtitleSettings";
 import { SubtitleList } from "@/components/subtitle/SubtitleList";
 import { VocabularyExtractor } from "@/components/subtitle/VocabularyExtractor";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { NativeSelect } from "@/components/ui/native-select";
 import { useSubtitleStore } from "@/stores/useSubtitleStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
-import { List, Globe, ArrowLeft } from "lucide-react";
+import { List, Globe, ArrowLeft, Subtitles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { LANGUAGES, LanguageCode, generateId } from "@/lib/utils";
@@ -33,11 +34,45 @@ export default function WatchPage() {
 
 function WatchContent() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
+
   const [video, setVideo] = useState<VideoInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedSub1, setSelectedSub1] = useState<string>("off");
+  const [selectedSub2, setSelectedSub2] = useState<string>("off");
+
   const { setSlotTrack, clearTracks } = useSubtitleStore();
   const { setCurrentTime } = usePlayerStore();
+
+  const loadSubtitleToSlot = useCallback(
+    async (subId: string, slot: 0 | 1) => {
+      if (subId === "off") {
+        setSlotTrack(slot, null);
+        return;
+      }
+      try {
+        const subRes = await fetch(`/api/subtitle/${subId}`);
+        if (subRes.ok) {
+          const subData = await subRes.json();
+          const targetSub = video?.subtitles.find((s) => s.id === subId);
+          if (targetSub) {
+            const langInfo = LANGUAGES[targetSub.language as LanguageCode];
+            setSlotTrack(slot, {
+              id: generateId(),
+              label: `${langInfo?.flag || ""} ${targetSub.label}`,
+              language: targetSub.language,
+              entries: subData.entries || [],
+              enabled: true,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load sub track", err);
+      }
+    },
+    [video, setSlotTrack]
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -56,28 +91,15 @@ function WatchContent() {
             setVideo(foundVideo);
             clearTracks();
 
+            // Set default subtitle jika tersedia
             if (foundVideo.subtitles && foundVideo.subtitles.length > 0) {
-              for (let i = 0; i < Math.min(foundVideo.subtitles.length, 2); i++) {
-                const sub = foundVideo.subtitles[i];
-                try {
-                  const subRes = await fetch(`/api/subtitle/${sub.id}`);
-                  if (subRes.ok) {
-                    const subData = await subRes.json();
-                    const langInfo = LANGUAGES[sub.language as LanguageCode];
-
-                    setSlotTrack(i as 0 | 1, {
-                      id: generateId(),
-                      label: `${langInfo?.flag || ""} ${sub.label}`,
-                      language: sub.language,
-                      entries: subData.entries || [],
-                      enabled: true,
-                    });
-                  }
-                } catch (err) {
-                  console.error("Failed to load sub track", err);
-                }
-              }
+              const sub1 = foundVideo.subtitles[0]?.id || "off";
+              const sub2 = foundVideo.subtitles[1]?.id || "off";
+              setSelectedSub1(sub1);
+              setSelectedSub2(sub2);
             }
+          } else {
+            setVideo(null);
           }
         }
       } catch (error) {
@@ -91,7 +113,27 @@ function WatchContent() {
     return () => {
       isMounted = false;
     };
-  }, [id, setSlotTrack, clearTracks]);
+  }, [id, clearTracks]);
+
+  // Handle pergantian Subtitle 1 dari Dropdown
+  const handleSub1Change = async (subId: string) => {
+    setSelectedSub1(subId);
+    await loadSubtitleToSlot(subId, 0);
+  };
+
+  // Handle pergantian Subtitle 2 dari Dropdown
+  const handleSub2Change = async (subId: string) => {
+    setSelectedSub2(subId);
+    await loadSubtitleToSlot(subId, 1);
+  };
+
+  // Load awal ketika video & subtitle terdeteksi
+  useEffect(() => {
+    if (video && video.subtitles.length > 0) {
+      if (selectedSub1 !== "off") loadSubtitleToSlot(selectedSub1, 0);
+      if (selectedSub2 !== "off") loadSubtitleToSlot(selectedSub2, 1);
+    }
+  }, [video, selectedSub1, selectedSub2, loadSubtitleToSlot]);
 
   const handleSeek = useCallback(
     (time: number) => {
@@ -115,10 +157,10 @@ function WatchContent() {
 
   if (!video) {
     return (
-      <div className="container mx-auto px-4 py-16 text-center">
-        <h2 className="text-xl font-bold mb-2">Video not found</h2>
-        <p className="text-muted-foreground mb-4">
-          The video you&apos;re looking for doesn&apos;t exist.
+      <div className="container mx-auto px-4 py-16 text-center space-y-3">
+        <h2 className="text-xl font-bold">Video Not Available</h2>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          This video may have been deleted from the Telegram channel or is no longer accessible.
         </p>
         <Link href="/">
           <Button variant="outline" className="gap-2">
@@ -131,15 +173,15 @@ function WatchContent() {
   }
 
   const lang = LANGUAGES[video.language as LanguageCode];
-
   const videoSrc =
-    video.sourceType === "telegram"
-      ? `/api/telegram/stream?fileId=${video.telegramFileId}&videoId=${video.id}`
-      : video.videoUrl || "";
+    video.sourceType === "hosted" && video.videoUrl
+      ? video.videoUrl
+      : `/api/telegram/stream?fileId=${video.telegramFileId}&videoId=${video.id}`;
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-start justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2">
             <Link href="/">
@@ -152,15 +194,17 @@ function WatchContent() {
             </h1>
           </div>
           <div className="flex items-center gap-2 ml-10">
+            {video.series && (
+              <Badge variant="default" className="text-[10px]">
+                📁 {video.series}
+              </Badge>
+            )}
             {lang && (
               <Badge variant="secondary" className="text-[10px] gap-1 shrink-0">
                 <Globe className="w-3 h-3" />
                 {lang.flag} {lang.label}
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] shrink-0">
-              {video.sourceType === "telegram" ? "📺 Channel" : "📁 Local"}
-            </Badge>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -169,11 +213,53 @@ function WatchContent() {
         </div>
       </div>
 
+      {/* Pilihan Subtitle 1 & 2 untuk Video Ini */}
+      {video.subtitles.length > 0 && (
+        <Card className="p-3 bg-card/60 backdrop-blur-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+            <div className="flex items-center gap-2">
+              <Subtitles className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-xs font-semibold shrink-0">Sub 1 (Bawah):</span>
+              <NativeSelect
+                value={selectedSub1}
+                onChange={(e) => handleSub1Change(e.target.value)}
+                className="h-8 text-xs"
+              >
+                <option value="off">Off (Matikan)</option>
+                {video.subtitles.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {LANGUAGES[sub.language as LanguageCode]?.flag || ""} {sub.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Subtitles className="w-4 h-4 text-secondary-foreground shrink-0" />
+              <span className="text-xs font-semibold shrink-0">Sub 2 (Atas):</span>
+              <NativeSelect
+                value={selectedSub2}
+                onChange={(e) => handleSub2Change(e.target.value)}
+                className="h-8 text-xs"
+              >
+                <option value="off">Off (Matikan)</option>
+                {video.subtitles.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {LANGUAGES[sub.language as LanguageCode]?.flag || ""} {sub.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Main Content */}
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           <VideoPlayer
             src={videoSrc}
-            poster={video.thumbnailUrl}
+            poster={video.thumbnailUrl || undefined}
             className="rounded-xl overflow-hidden shadow-lg border"
           />
 
