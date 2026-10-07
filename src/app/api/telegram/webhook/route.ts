@@ -4,74 +4,69 @@ import { prisma } from "@/lib/db";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const message = body.message || body.channel_post;
+    // Tangkap pesan dari pesan pribadi maupun Channel Post
+    const msg = body.message || body.channel_post;
 
-    if (!message) {
+    if (!msg) {
       return NextResponse.json({ ok: true });
     }
 
-    // 1. JIKA MEMPOSTING VIDEO
-    if (message.video) {
-      const video = message.video;
-      const caption = (message.caption || "").toLowerCase();
+    const caption = (msg.caption || "").toLowerCase();
 
-      // Deteksi bahasa dari hashtag caption
-      let language = "en"; // default English
-      if (caption.includes("#ja") || caption.includes("#jpn") || caption.includes("#japanese")) {
-        language = "ja";
-      } else if (caption.includes("#id") || caption.includes("#ind") || caption.includes("#indonesian")) {
-        language = "id";
-      } else if (caption.includes("#en") || caption.includes("#eng") || caption.includes("#english")) {
-        language = "en";
-      }
+    // Fungsi pembantu deteksi hashtag bahasa
+    const detectLang = (str: string) => {
+      if (str.includes("#ja") || str.includes("#jpn") || str.includes("#japanese")) return "ja";
+      if (str.includes("#id") || str.includes("#ind") || str.includes("#indonesian")) return "id";
+      return "en";
+    };
 
-      // Bersihkan hashtag dari Judul Video
-      const cleanTitle = (message.caption || "Untitled Video")
-        .replace(/#\w+/g, "")
-        .trim() || "Untitled Video";
+    // Cek apakah lampiran adalah Video biasa ATAU File Dokumen Video (.mkv, .mp4, .avi, dll)
+    const isNativeVideo = !!msg.video;
+    const isVideoDocument =
+      msg.document &&
+      (msg.document.mime_type?.startsWith("video/") ||
+        /\.(mkv|mp4|avi|mov|webm)$/i.test(msg.document.file_name || ""));
+
+    // 1. JIKA POSTINGAN ADALAH VIDEO (BAIK NATIVE MAUPUN DOKUMEN FILE)
+    if (isNativeVideo || isVideoDocument) {
+      const fileId = isNativeVideo ? msg.video.file_id : msg.document.file_id;
+      const duration = isNativeVideo ? msg.video.duration : null;
+      const rawTitle = msg.caption || msg.document?.file_name || "Untitled Video";
+      const cleanTitle = rawTitle.replace(/#\w+/g, "").trim() || "Untitled Video";
+      const language = detectLang(caption);
 
       await prisma.video.create({
         data: {
           title: cleanTitle,
           sourceType: "telegram",
-          telegramFileId: video.file_id,
-          telegramChatId: String(message.chat.id),
-          telegramMessageId: message.message_id,
-          duration: video.duration,
+          telegramFileId: fileId,
+          telegramChatId: String(msg.chat.id),
+          telegramMessageId: msg.message_id,
+          duration,
           language,
         },
       });
+
+      return NextResponse.json({ ok: true, status: "Video saved" });
     }
 
-    // 2. JIKA MEMBALAS (REPLY) VIDEO DENGAN FILE SUBTITLE (.srt / .ass)
-    if (message.document) {
-      const doc = message.document;
+    // 2. JIKA REPLY VIDEO DENGAN FILE SUBTITLE (.srt / .ass / .ssa)
+    if (msg.document) {
+      const doc = msg.document;
       const fileName = doc.file_name || "";
+      const isSubFile = /\.(srt|ass|ssa)$/i.test(fileName);
 
-      if (
-        fileName.endsWith(".srt") ||
-        fileName.endsWith(".ass") ||
-        fileName.endsWith(".ssa")
-      ) {
-        const replyToMessage = message.reply_to_message;
-        if (replyToMessage?.video) {
+      if (isSubFile && msg.reply_to_message) {
+        const replyMsg = msg.reply_to_message;
+        const targetFileId = replyMsg.video?.file_id || replyMsg.document?.file_id;
+
+        if (targetFileId) {
           const existingVideo = await prisma.video.findFirst({
-            where: {
-              telegramFileId: replyToMessage.video.file_id,
-            },
+            where: { telegramFileId: targetFileId },
           });
 
           if (existingVideo) {
-            const caption = (message.caption || "").toLowerCase();
-            let subLanguage = "en";
-            if (caption.includes("#ja") || caption.includes("#jpn") || caption.includes("#japanese")) {
-              subLanguage = "ja";
-            } else if (caption.includes("#id") || caption.includes("#ind") || caption.includes("#indonesian")) {
-              subLanguage = "id";
-            } else if (caption.includes("#en") || caption.includes("#eng") || caption.includes("#english")) {
-              subLanguage = "en";
-            }
-
+            const subLanguage = detectLang(caption);
             const labelMap: Record<string, string> = {
               ja: "Japanese",
               id: "Indonesian",
@@ -86,9 +81,11 @@ export async function POST(request: NextRequest) {
                 sourceType: "telegram",
                 telegramFileId: doc.file_id,
                 content: "[]",
-                format: fileName.endsWith(".ass") || fileName.endsWith(".ssa") ? "ass" : "srt",
+                format: /\.(ass|ssa)$/i.test(fileName) ? "ass" : "srt",
               },
             });
+
+            return NextResponse.json({ ok: true, status: "Subtitle saved" });
           }
         }
       }
@@ -97,6 +94,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Telegram webhook error:", error);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, error: String(error) });
   }
 }
