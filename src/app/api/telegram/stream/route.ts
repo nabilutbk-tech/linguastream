@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-  // 1. Coba lewat Telegram Bot API dulu (Untuk file kecil < 20MB)
+  // 1. Coba lewat Telegram Bot API getFile (Untuk file kecil < 20MB)
   if (fileId && BOT_TOKEN) {
     try {
       const res = await fetch(
@@ -28,16 +28,32 @@ export async function GET(request: NextRequest) {
   if (videoId) {
     try {
       const video = await prisma.video.findUnique({ where: { id: videoId } });
+
       if (video && video.telegramMessageId) {
-        let embedUrl = "";
-        if (video.telegramChatUsername) {
-          embedUrl = `https://t.me/${video.telegramChatUsername}/${video.telegramMessageId}?embed=1`;
-        } else if (video.telegramChatId) {
-          const cleanId = video.telegramChatId.replace("-100", "");
-          embedUrl = `https://t.me/c/${cleanId}/${video.telegramMessageId}?embed=1`;
+        let username = video.telegramChatUsername;
+
+        // Jika video lama durasinya belum punya username di DB, panggil getChat
+        if (!username && video.telegramChatId && BOT_TOKEN) {
+          try {
+            const chatRes = await fetch(
+              `https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${video.telegramChatId}`
+            );
+            const chatData = await chatRes.json();
+            if (chatData.ok && chatData.result?.username) {
+              username = chatData.result.username;
+              // Simpan ke DB agar selanjutnya instant
+              await prisma.video.update({
+                where: { id: video.id },
+                data: { telegramChatUsername: username },
+              });
+            }
+          } catch (e) {
+            console.error("Failed to fetch chat username", e);
+          }
         }
 
-        if (embedUrl) {
+        if (username) {
+          const embedUrl = `https://t.me/${username}/${video.telegramMessageId}?embed=1`;
           const res = await fetch(embedUrl, {
             headers: {
               "User-Agent":
@@ -46,10 +62,12 @@ export async function GET(request: NextRequest) {
           });
           const html = await res.text();
 
+          // Ekstrak URL Video CDN dari HTML Embed Telegram
           const match =
-            html.match(/<video[^>]+src=["']([^"']+)["']/i) ||
             html.match(/src=["'](https:\/\/[^"']+\.(?:mp4|mkv|webm)[^"']*)["']/i) ||
-            html.match(/(https:\/\/v\.t\.me\/[^\s"']+)/);
+            html.match(/<video[^>]+src=["']([^"']+)["']/i) ||
+            html.match(/(https:\/\/v\.t\.me\/watch\/[^\s"'<]+)/) ||
+            html.match(/(https:\/\/[^"']+\.usercontent\.telegram\.org[^\s"'<]+)/);
 
           if (match && match[1]) {
             return NextResponse.redirect(match[1]);
@@ -61,7 +79,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return new NextResponse("Video file unavailable or exceeds Telegram API limit", {
-    status: 404,
-  });
+  return new NextResponse(
+    "Video unavailable. Make sure the Telegram channel is PUBLIC with a username link.",
+    { status: 404 }
+  );
 }
