@@ -1,14 +1,15 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const videoId = searchParams.get("videoId");
-  const fileId = searchParams.get("fileId");
+  const videoId = request.nextUrl.searchParams.get("videoId");
+  const fileId = request.nextUrl.searchParams.get("fileId");
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-  // 1. Coba lewat Telegram Bot API getFile
+  // 1. Coba lewat Telegram Bot API getFile (Untuk file kecil < 20MB)
   if (fileId && BOT_TOKEN) {
     try {
       const res = await fetch(
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. Fallback untuk Video Besar dari Telegram Public Embed
+  // 2. Fallback untuk Video Besar (> 20MB) dari Telegram Public Embed
   if (videoId) {
     try {
       const video = await prisma.video.findUnique({ where: { id: videoId } });
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
       if (video && video.telegramMessageId) {
         let username = video.telegramChatUsername;
 
+        // Auto-fetch username jika belum tersimpan di DB
         if (!username && video.telegramChatId && BOT_TOKEN) {
           try {
             const chatRes = await fetch(
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // HAPUS DARI DATABASE OTOMATIS JIKA VIDEO SUDAH TIDAK DITEMUKAN DI TELEGRAM
+        // Hapus dari DB jika video hilang di Telegram
         await prisma.video.delete({ where: { id: video.id } }).catch(() => {});
       }
     } catch (err) {
