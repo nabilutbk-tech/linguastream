@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return "en";
     };
 
-    // Deteksi Nama Folder/Series dari [Nama Folder]
+    // Deteksi Folder/Series dari [Nama Folder]
     const seriesMatch = caption.match(/\[(.*?)\]/);
     const seriesName = seriesMatch ? seriesMatch[1].trim() : null;
 
@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
       const duration = isNativeVideo ? msg.video.duration : null;
       const language = detectLang(lowerCaption);
 
-      // Ambil Thumbnail Otomatis buatan Telegram
       let thumbFileId = null;
       if (isNativeVideo && msg.video.thumbnail) {
         thumbFileId = msg.video.thumbnail.file_id;
@@ -53,7 +52,6 @@ export async function POST(request: NextRequest) {
       const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
       let thumbnailUrl = null;
 
-      // Ambil URL Gambar Thumbnail dari Telegram
       if (thumbFileId && BOT_TOKEN) {
         try {
           const thumbRes = await fetch(
@@ -63,8 +61,8 @@ export async function POST(request: NextRequest) {
           if (thumbData.ok && thumbData.result?.file_path) {
             thumbnailUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${thumbData.result.file_path}`;
           }
-        } catch (e) {
-          console.error("Failed to fetch thumbnail", e);
+        } catch {
+          // Ignore thumbnail failure safely
         }
       }
 
