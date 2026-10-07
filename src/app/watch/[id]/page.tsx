@@ -1,6 +1,6 @@
 "use client";
-export const dynamic = "force-dynamic";
-import React, { useEffect, useState, useCallback } from "react";
+
+import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useParams } from "next/navigation";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { SubtitleSettings } from "@/components/video/SubtitleSettings";
@@ -17,6 +17,21 @@ import { LANGUAGES, LanguageCode, generateId } from "@/lib/utils";
 import { VideoInfo } from "@/types";
 
 export default function WatchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto px-4 py-6 space-y-4 animate-pulse">
+          <div className="h-8 bg-muted rounded w-48" />
+          <div className="aspect-video w-full bg-muted rounded-xl" />
+        </div>
+      }
+    >
+      <WatchContent />
+    </Suspense>
+  );
+}
+
+function WatchContent() {
   const params = useParams();
   const id = params?.id as string;
   const [video, setVideo] = useState<VideoInfo | null>(null);
@@ -41,7 +56,6 @@ export default function WatchPage() {
             setVideo(foundVideo);
             clearTracks();
 
-            // Load subtitles automatically to Slot 0 and Slot 1
             if (foundVideo.subtitles && foundVideo.subtitles.length > 0) {
               for (let i = 0; i < Math.min(foundVideo.subtitles.length, 2); i++) {
                 const sub = foundVideo.subtitles[i];
@@ -50,7 +64,7 @@ export default function WatchPage() {
                   if (subRes.ok) {
                     const subData = await subRes.json();
                     const langInfo = LANGUAGES[sub.language as LanguageCode];
-                    
+
                     setSlotTrack(i as 0 | 1, {
                       id: generateId(),
                       label: `${langInfo?.flag || ""} ${sub.label}`,
@@ -73,8 +87,10 @@ export default function WatchPage() {
       }
     };
     fetchVideo();
-    
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [id, setSlotTrack, clearTracks]);
 
   const handleSeek = useCallback(
@@ -115,11 +131,11 @@ export default function WatchPage() {
   }
 
   const lang = LANGUAGES[video.language as LanguageCode];
-  
-  // Tentukan Source Video (Gunakan API Proxy jika dari Telegram)
-  const videoSrc = video.sourceType === "telegram"
-    ? `/api/telegram/stream?fileId=${video.telegramFileId}`
-    : video.videoUrl || "";
+
+  const videoSrc =
+    video.sourceType === "telegram"
+      ? `/api/telegram/stream?fileId=${video.telegramFileId}`
+      : video.videoUrl || "";
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-4">

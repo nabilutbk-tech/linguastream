@@ -1,6 +1,6 @@
 "use client";
-export const dynamic = "force-dynamic";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, Suspense } from "react";
 import { VideoGrid } from "@/components/library/VideoGrid";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,14 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto p-6 text-center text-sm text-muted-foreground">Loading Library...</div>}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const [videos, setVideos] = useState<VideoInfo[]>([]);
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
