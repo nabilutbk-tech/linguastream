@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const caption = msg.caption || msg.document?.file_name || "";
+    const caption = msg.caption || msg.text || msg.document?.file_name || "";
     const lowerCaption = caption.toLowerCase();
 
     // Deteksi Bahasa
@@ -24,9 +24,14 @@ export async function POST(request: NextRequest) {
     const seriesMatch = caption.match(/\[(.*?)\]/);
     const seriesName = seriesMatch ? seriesMatch[1].trim() : null;
 
-    // Bersihkan Judul dari [Folder] dan #hashtag
+    // Deteksi Direct URL (http/https) di dalam caption/teks
+    const urlMatch = caption.match(/(https?:\/\/[^\s]+)/i);
+    const externalVideoUrl = urlMatch ? urlMatch[1] : null;
+
+    // Bersihkan Judul dari [Folder], URL, dan #hashtag
     const cleanTitle = caption
       .replace(/\[.*?\]/g, "")
+      .replace(/(https?:\/\/[^\s]+)/gi, "")
       .replace(/#\w+/g, "")
       .trim() || "Untitled Video";
 
@@ -36,9 +41,13 @@ export async function POST(request: NextRequest) {
       (msg.document.mime_type?.startsWith("video/") ||
         /\.(mkv|mp4|avi|mov|webm)$/i.test(msg.document.file_name || ""));
 
-    // 1. JIKA POSTINGAN ADALAH VIDEO
-    if (isNativeVideo || isVideoDocument) {
-      const fileId = isNativeVideo ? msg.video.file_id : msg.document.file_id;
+    // 1. JIKA POSTINGAN ADALAH VIDEO (NATIVE / DOKUMEN / MEMILIKI LINK VIDEO)
+    if (isNativeVideo || isVideoDocument || externalVideoUrl) {
+      const fileId = isNativeVideo
+        ? msg.video.file_id
+        : msg.document
+        ? msg.document.file_id
+        : null;
       const duration = isNativeVideo ? msg.video.duration : null;
       const language = detectLang(lowerCaption);
 
@@ -62,7 +71,7 @@ export async function POST(request: NextRequest) {
             thumbnailUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${thumbData.result.file_path}`;
           }
         } catch {
-          // Ignore thumbnail failure safely
+          // Ignore thumbnail failure
         }
       }
 
@@ -70,7 +79,8 @@ export async function POST(request: NextRequest) {
         data: {
           title: cleanTitle,
           series: seriesName,
-          sourceType: "telegram",
+          sourceType: externalVideoUrl ? "hosted" : "telegram",
+          videoUrl: externalVideoUrl,
           telegramFileId: fileId,
           telegramChatId: String(msg.chat.id),
           telegramChatUsername: msg.chat.username || null,
@@ -84,7 +94,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, status: "Video saved" });
     }
 
-    // 2. JIKA REPLY VIDEO DENGAN FILE SUBTITLE
+    // 2. JIKA REPLY VIDEO DENGAN FILE SUBTITLE (.srt / .ass)
     if (msg.document) {
       const doc = msg.document;
       const fileName = doc.file_name || "";
@@ -93,34 +103,39 @@ export async function POST(request: NextRequest) {
       if (isSubFile && msg.reply_to_message) {
         const replyMsg = msg.reply_to_message;
         const targetFileId = replyMsg.video?.file_id || replyMsg.document?.file_id;
+        const targetMsgId = replyMsg.message_id;
 
-        if (targetFileId) {
-          const existingVideo = await prisma.video.findFirst({
-            where: { telegramFileId: targetFileId },
+        // Cari video berdasarkan file_id atau message_id
+        const existingVideo = await prisma.video.findFirst({
+          where: {
+            OR: [
+              { telegramFileId: targetFileId },
+              { telegramMessageId: targetMsgId },
+            ],
+          },
+        });
+
+        if (existingVideo) {
+          const subLanguage = detectLang(lowerCaption);
+          const labelMap: Record<string, string> = {
+            ja: "Japanese",
+            id: "Indonesian",
+            en: "English",
+          };
+
+          await prisma.subtitle.create({
+            data: {
+              videoId: existingVideo.id,
+              language: subLanguage,
+              label: labelMap[subLanguage] || "English",
+              sourceType: "telegram",
+              telegramFileId: doc.file_id,
+              content: "[]",
+              format: /\.(ass|ssa)$/i.test(fileName) ? "ass" : "srt",
+            },
           });
 
-          if (existingVideo) {
-            const subLanguage = detectLang(lowerCaption);
-            const labelMap: Record<string, string> = {
-              ja: "Japanese",
-              id: "Indonesian",
-              en: "English",
-            };
-
-            await prisma.subtitle.create({
-              data: {
-                videoId: existingVideo.id,
-                language: subLanguage,
-                label: labelMap[subLanguage] || "English",
-                sourceType: "telegram",
-                telegramFileId: doc.file_id,
-                content: "[]",
-                format: /\.(ass|ssa)$/i.test(fileName) ? "ass" : "srt",
-              },
-            });
-
-            return NextResponse.json({ ok: true, status: "Subtitle saved" });
-          }
+          return NextResponse.json({ ok: true, status: "Subtitle saved" });
         }
       }
     }
