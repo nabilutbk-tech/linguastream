@@ -1,5 +1,5 @@
 "use client";
-
+export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
 import { VideoGrid } from "@/components/library/VideoGrid";
 import { Input } from "@/components/ui/input";
