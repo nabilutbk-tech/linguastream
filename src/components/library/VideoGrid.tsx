@@ -6,10 +6,9 @@ import { Film } from "lucide-react";
 
 interface VideoGridProps {
   videos: VideoInfo[];
-  onVideoDeleted?: () => void;
 }
 
-export function VideoGrid({ videos, onVideoDeleted }: VideoGridProps) {
+export function VideoGrid({ videos }: VideoGridProps) {
   if (videos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -27,7 +26,7 @@ export function VideoGrid({ videos, onVideoDeleted }: VideoGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {videos.map((video) => (
-        <VideoCard key={video.id} video={video} onDeleted={onVideoDeleted} />
+        <VideoCard key={video.id} video={video} />
       ))}
     </div>
   );

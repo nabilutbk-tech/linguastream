@@ -46,7 +46,6 @@ function HomeContent() {
     }
   };
 
-  // Kumpulkan semua Series/Folder unik yang ada
   const availableSeries = Array.from(
     new Set(videos.map((v) => v.series).filter(Boolean))
   ) as string[];
@@ -176,7 +175,7 @@ function HomeContent() {
           ))}
         </div>
       ) : (
-        <VideoGrid videos={filteredVideos} onVideoDeleted={fetchVideos} />
+        <VideoGrid videos={filteredVideos} />
       )}
     </div>
   );

@@ -10,7 +10,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const caption = msg.caption || msg.text || msg.document?.file_name || "";
+    const text = (msg.text || msg.caption || "").trim().toLowerCase();
+
+    // -------------------------------------------------------------
+    // FITUR DELETE: JIKA REPLY PESAN VIDEO DENGAN #delete ATAU /delete
+    // -------------------------------------------------------------
+    if ((text === "#delete" || text === "/delete") && msg.reply_to_message) {
+      const replyMsg = msg.reply_to_message;
+      const targetFileId = replyMsg.video?.file_id || replyMsg.document?.file_id;
+      const targetMsgId = replyMsg.message_id;
+
+      // Cari video berdasarkan file_id atau message_id
+      const existingVideo = await prisma.video.findFirst({
+        where: {
+          OR: [
+            { telegramFileId: targetFileId },
+            { telegramMessageId: targetMsgId },
+          ],
+        },
+      });
+
+      if (existingVideo) {
+        await prisma.video.delete({ where: { id: existingVideo.id } });
+        return NextResponse.json({ ok: true, status: "Video deleted successfully" });
+      }
+    }
+
+    const caption = msg.caption || msg.document?.file_name || "";
     const lowerCaption = caption.toLowerCase();
 
     // Deteksi Bahasa
@@ -24,30 +50,17 @@ export async function POST(request: NextRequest) {
     const seriesMatch = caption.match(/\[(.*?)\]/);
     const seriesName = seriesMatch ? seriesMatch[1].trim() : null;
 
-    // Deteksi Direct URL (http/https) di dalam caption/teks
-    const urlMatch = caption.match(/(https?:\/\/[^\s]+)/i);
-    const externalVideoUrl = urlMatch ? urlMatch[1] : null;
-
-    // Bersihkan Judul dari [Folder], URL, dan #hashtag
-    const cleanTitle = caption
-      .replace(/\[.*?\]/g, "")
-      .replace(/(https?:\/\/[^\s]+)/gi, "")
-      .replace(/#\w+/g, "")
-      .trim() || "Untitled Video";
-
     const isNativeVideo = !!msg.video;
     const isVideoDocument =
       msg.document &&
       (msg.document.mime_type?.startsWith("video/") ||
         /\.(mkv|mp4|avi|mov|webm)$/i.test(msg.document.file_name || ""));
 
-    // 1. JIKA POSTINGAN ADALAH VIDEO (NATIVE / DOKUMEN / MEMILIKI LINK VIDEO)
-    if (isNativeVideo || isVideoDocument || externalVideoUrl) {
-      const fileId = isNativeVideo
-        ? msg.video.file_id
-        : msg.document
-        ? msg.document.file_id
-        : null;
+    // -------------------------------------------------------------
+    // 1. JIKA POSTINGAN ADALAH VIDEO BARU
+    // -------------------------------------------------------------
+    if (isNativeVideo || isVideoDocument) {
+      const fileId = isNativeVideo ? msg.video.file_id : msg.document.file_id;
       const duration = isNativeVideo ? msg.video.duration : null;
       const language = detectLang(lowerCaption);
 
@@ -75,12 +88,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const cleanTitle = caption
+        .replace(/\[.*?\]/g, "")
+        .replace(/#\w+/g, "")
+        .trim() || "Untitled Video";
+
       await prisma.video.create({
         data: {
           title: cleanTitle,
           series: seriesName,
-          sourceType: externalVideoUrl ? "hosted" : "telegram",
-          videoUrl: externalVideoUrl,
+          sourceType: "telegram",
           telegramFileId: fileId,
           telegramChatId: String(msg.chat.id),
           telegramChatUsername: msg.chat.username || null,
@@ -94,7 +111,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, status: "Video saved" });
     }
 
+    // -------------------------------------------------------------
     // 2. JIKA REPLY VIDEO DENGAN FILE SUBTITLE (.srt / .ass)
+    // -------------------------------------------------------------
     if (msg.document) {
       const doc = msg.document;
       const fileName = doc.file_name || "";
@@ -105,7 +124,6 @@ export async function POST(request: NextRequest) {
         const targetFileId = replyMsg.video?.file_id || replyMsg.document?.file_id;
         const targetMsgId = replyMsg.message_id;
 
-        // Cari video berdasarkan file_id atau message_id
         const existingVideo = await prisma.video.findFirst({
           where: {
             OR: [

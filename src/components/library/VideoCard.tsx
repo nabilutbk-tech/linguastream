@@ -3,41 +3,16 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Play, Subtitles, Globe, Trash2 } from "lucide-react";
+import { Play, Subtitles, Globe } from "lucide-react";
 import { VideoInfo } from "@/types";
 import { formatTime, LANGUAGES, LanguageCode } from "@/lib/utils";
-import { useToast } from "@/components/ui/use-toast";
 
 interface VideoCardProps {
   video: VideoInfo;
-  onDeleted?: () => void;
 }
 
-export function VideoCard({ video, onDeleted }: VideoCardProps) {
+export function VideoCard({ video }: VideoCardProps) {
   const lang = LANGUAGES[video.language as LanguageCode];
-  const { toast } = useToast();
-
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!confirm(`Hapus "${video.title}" dari Library web?`)) return;
-
-    try {
-      const res = await fetch(`/api/videos?id=${video.id}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        toast({ title: "Video berhasil dihapus dari Library" });
-        if (onDeleted) onDeleted();
-      } else {
-        toast({ title: "Gagal menghapus video", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Terjadi kesalahan", variant: "destructive" });
-    }
-  };
 
   return (
     <Link href={`/watch/${video.id}`}>
@@ -73,18 +48,6 @@ export function VideoCard({ video, onDeleted }: VideoCardProps) {
           >
             {video.sourceType === "telegram" ? "📺 Channel" : "📁 Local"}
           </Badge>
-
-          {/* Tombol Hapus Video */}
-          <Button
-            type="button"
-            variant="destructive"
-            size="icon"
-            className="absolute top-2 right-2 w-7 h-7 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md"
-            onClick={handleDelete}
-            title="Hapus dari Library"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
         </div>
 
         <CardContent className="p-3 space-y-2">
