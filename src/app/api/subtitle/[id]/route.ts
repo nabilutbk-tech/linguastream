@@ -4,10 +4,11 @@ import { parseSRT, parseASS } from "@/lib/subtitle-parser";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> } 
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
     const sub = await prisma.subtitle.findUnique({ where: { id } });
     if (!sub) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
