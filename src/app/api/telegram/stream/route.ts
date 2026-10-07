@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  const videoId = request.nextUrl.searchParams.get("videoId");
-  const fileId = request.nextUrl.searchParams.get("fileId");
+  const { searchParams } = new URL(request.url);
+  const videoId = searchParams.get("videoId");
+  const fileId = searchParams.get("fileId");
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -83,8 +84,6 @@ export async function GET(request: NextRequest) {
             console.error("Embed fetch error:", e);
           }
         }
-
-        await prisma.video.delete({ where: { id: video.id } }).catch(() => {});
       }
     } catch (err) {
       console.error("Stream route error:", err);
@@ -92,7 +91,7 @@ export async function GET(request: NextRequest) {
   }
 
   return new NextResponse(
-    "Video unavailable or deleted from Telegram channel.",
+    "Video stream unavailable. Make sure the video on Telegram is in .mp4 format.",
     { status: 404 }
   );
 }
