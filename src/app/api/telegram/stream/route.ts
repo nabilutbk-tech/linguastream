@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
@@ -33,7 +31,6 @@ export async function GET(request: NextRequest) {
       if (video && video.telegramMessageId) {
         let username = video.telegramChatUsername;
 
-        // Auto-fetch username jika belum tersimpan di DB
         if (!username && video.telegramChatId && BOT_TOKEN) {
           try {
             const chatRes = await fetch(
@@ -87,7 +84,6 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // Hapus dari DB jika video hilang di Telegram
         await prisma.video.delete({ where: { id: video.id } }).catch(() => {});
       }
     } catch (err) {
