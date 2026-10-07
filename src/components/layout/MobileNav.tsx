@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Library, Upload, BookOpen, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Suspense } from "react";
 
 const navItems = [
   { href: "/", label: "Library", icon: Library },
@@ -12,7 +13,7 @@ const navItems = [
   { href: "/quiz", label: "Quiz", icon: Sparkles },
 ];
 
-export function MobileNav() {
+function MobileNavContent() {
   const pathname = usePathname();
 
   return (
@@ -42,5 +43,13 @@ export function MobileNav() {
         })}
       </div>
     </nav>
+  );
+}
+
+export function MobileNav() {
+  return (
+    <Suspense fallback={null}>
+      <MobileNavContent />
+    </Suspense>
   );
 }

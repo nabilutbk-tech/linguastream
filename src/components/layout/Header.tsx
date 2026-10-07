@@ -6,6 +6,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Languages, BookOpen, Upload, Library, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Suspense } from "react";
 
 const navItems = [
   { href: "/", label: "Library", icon: Library },
@@ -14,7 +15,7 @@ const navItems = [
   { href: "/quiz", label: "Quiz", icon: Sparkles },
 ];
 
-export function Header() {
+function HeaderContent() {
   const pathname = usePathname();
 
   return (
@@ -59,5 +60,17 @@ export function Header() {
         </div>
       </div>
     </header>
+  );
+}
+
+export function Header() {
+  return (
+    <Suspense
+      fallback={
+        <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl h-14" />
+      }
+    >
+      <HeaderContent />
+    </Suspense>
   );
 }
