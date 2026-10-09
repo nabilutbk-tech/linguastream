@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useSubtitleStore } from "@/stores/useSubtitleStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,26 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/native-select";
 import { RangeInput } from "@/components/ui/range-input";
-import { Settings, Palette, Type, Clock, Trash2, ArrowUpDown } from "lucide-react";
+import {
+  Settings,
+  Palette,
+  Type,
+  Clock,
+  Trash2,
+  ArrowUpDown,
+  FileText,
+} from "lucide-react";
 import { SubtitleStyle } from "@/types";
 import { cn } from "@/lib/utils";
+import {
+  parseSRT,
+  parseASS,
+  detectSubtitleFormat,
+  detectLanguage,
+} from "@/lib/subtitle-parser";
+import { LANGUAGES, generateId } from "@/lib/utils";
+import { useToast } from "@/components/ui/use-toast";
+import { setLocalMedia, deleteLocalMedia } from "@/lib/idb";
 
 const fontFamilies = [
   { value: "system-ui", label: "System (default)" },
@@ -211,8 +228,85 @@ function StyleEditor({
   );
 }
 
-export function SubtitleSettings() {
+function SubUploadSlot({
+  title,
+  hint,
+  slot,
+  currentName,
+  onPick,
+  onClear,
+}: {
+  title: string;
+  hint: string;
+  slot: 0 | 1;
+  currentName?: string;
+  onPick: (file: File, lang: string, slot: 0 | 1) => void;
+  onClear: () => void;
+}) {
+  const [lang, setLang] = useState("auto");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3 bg-muted/10">
+      <div className="space-y-0.5">
+        <p className="flex items-center gap-1.5 text-xs font-semibold">
+          <FileText className="h-3.5 w-3.5 text-primary" />
+          {title}
+        </p>
+        <p className="text-[11px] text-muted-foreground">{hint}</p>
+      </div>
+      <div className="flex gap-2">
+        <NativeSelect
+          value={lang}
+          onChange={(e) => setLang(e.target.value)}
+          className="w-[90px] shrink-0 text-xs"
+        >
+          <option value="auto">Auto</option>
+          <option value="ja">JA</option>
+          <option value="en">EN</option>
+          <option value="id">ID</option>
+        </NativeSelect>
+        <Input
+          ref={inputRef}
+          type="file"
+          accept=".srt,.ass,.ssa"
+          className="h-9 min-w-0 flex-1 text-xs file:mr-2 file:cursor-pointer file:rounded file:border-0 file:bg-secondary file:px-2 file:py-0.5 file:text-[10px]"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onPick(f, lang, slot);
+          }}
+        />
+      </div>
+      {currentName && (
+        <div className="flex items-center gap-2 mt-1">
+          <Badge variant="outline" className="min-w-0 flex-1 truncate text-[10px] bg-background">
+            {currentName}
+          </Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              onClear();
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+          >
+            Hapus
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SubtitleSettings({
+  enableFileUpload = false,
+}: {
+  enableFileUpload?: boolean;
+}) {
   const [tab, setTab] = useState<"primary" | "secondary">("primary");
+  const { toast } = useToast();
 
   const {
     primaryTrack,
@@ -225,11 +319,52 @@ export function SubtitleSettings() {
     toggleTrack,
     removeTrack,
     swapSlots,
+    setSlotTrack,
     setPrimaryStyle,
     setSecondaryStyle,
     setOffsetPrimary,
     setOffsetSecondary,
   } = useSubtitleStore();
+
+  const loadSubFile = async (
+    file: File,
+    selectedLang: string,
+    slot: 0 | 1
+  ) => {
+    try {
+      const content = await file.text();
+      const format = detectSubtitleFormat(file.name);
+      const entries = format === "ass" ? parseASS(content) : parseSRT(content);
+      if (!entries.length) {
+        toast({
+          title: "Subtitle kosong / gagal dibaca",
+          variant: "destructive",
+        });
+        return;
+      }
+      const detected = detectLanguage(entries);
+      const lang =
+        selectedLang === "auto" ? detected ?? "en" : selectedLang;
+      const info = LANGUAGES[lang as keyof typeof LANGUAGES];
+
+      setSlotTrack(slot, {
+        id: generateId(),
+        label: `${info?.flag ?? ""} ${info?.label ?? lang}`,
+        language: lang,
+        entries,
+        enabled: true,
+        fileName: file.name,
+      });
+
+      await setLocalMedia(`sub${slot}`, { file, lang: selectedLang });
+      toast({
+        title: `Subtitle ${slot + 1} dimuat`,
+        description: `${file.name} • ${entries.length} baris`,
+      });
+    } catch {
+      toast({ title: "Gagal baca subtitle", variant: "destructive" });
+    }
+  };
 
   const slotTracks = [
     primaryTrack ? { track: primaryTrack, slot: 0 as const, tag: "Sub 1 (Bottom)" } : null,
@@ -256,6 +391,38 @@ export function SubtitleSettings() {
         </SheetHeader>
 
         <div className="space-y-6 px-4 pb-10">
+          {/* File Upload Section if enabled */}
+          {enableFileUpload && (
+            <div className="space-y-2 pt-2">
+              <Label className="text-sm font-medium">Upload Subtitle Lokal</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SubUploadSlot
+                  title="Subtitle 1 (Primary)"
+                  hint="Baris bawah di video"
+                  slot={0}
+                  currentName={primaryTrack?.fileName}
+                  onPick={loadSubFile}
+                  onClear={async () => {
+                    setSlotTrack(0, null);
+                    await deleteLocalMedia("sub0");
+                  }}
+                />
+                <SubUploadSlot
+                  title="Subtitle 2 (Secondary)"
+                  hint="Baris atas di video"
+                  slot={1}
+                  currentName={secondaryTrack?.fileName}
+                  onPick={loadSubFile}
+                  onClear={async () => {
+                    setSlotTrack(1, null);
+                    await deleteLocalMedia("sub1");
+                  }}
+                />
+              </div>
+              <Separator className="mt-4" />
+            </div>
+          )}
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Loaded Subtitles</Label>
