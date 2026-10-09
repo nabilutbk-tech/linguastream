@@ -2,41 +2,45 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  const videoId = request.nextUrl.searchParams.get("videoId");
-  const fileId = request.nextUrl.searchParams.get("fileId");
+  const { searchParams } = new URL(request.url);
+  const videoId = searchParams.get("videoId");
+  const fileId = searchParams.get("fileId");
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-  // 1. Jika ada videoUrl langsung (misal dari Catbox/Drive/Hosted)
   if (videoId) {
     try {
       const video = await prisma.video.findUnique({ where: { id: videoId } });
       if (video?.videoUrl) {
-        return NextResponse.redirect(video.videoUrl);
+        let finalUrl = video.videoUrl;
+
+        // AUTO-FIX PIXELDRAIN: Ganti /u/ menjadi /api/file/
+        if (finalUrl.includes("pixeldrain.com/u/")) {
+          finalUrl = finalUrl.replace("pixeldrain.com/u/", "pixeldrain.com/api/file/");
+        }
+        
+        // AUTO-FIX DROPBOX: Tambahkan raw=1 agar jadi link video asli
+        if (finalUrl.includes("dropbox.com") && !finalUrl.includes("raw=1")) {
+          finalUrl = finalUrl.includes("?") ? `${finalUrl}&raw=1` : `${finalUrl}?raw=1`;
+        }
+
+        return NextResponse.redirect(finalUrl);
       }
     } catch (e) {
-      console.error("Fetch videoUrl error:", e);
+      console.error("Stream redirect error:", e);
     }
   }
 
-  // 2. Coba lewat Telegram Bot API getFile (< 20MB)
+  // Fallback Telegram Bot API (< 20MB)
   if (fileId && BOT_TOKEN) {
     try {
-      const res = await fetch(
-        `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
-      );
+      const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
       const data = await res.json();
       if (data.ok && data.result?.file_path) {
-        const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`;
-        return NextResponse.redirect(fileUrl);
+        return NextResponse.redirect(`https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`);
       }
-    } catch {
-      // Continue
-    }
+    } catch {}
   }
 
-  return new NextResponse(
-    "Video stream unavailable. Please use a direct MP4 link in Telegram caption for large files.",
-    { status: 404 }
-  );
+  return new NextResponse("Video stream unavailable", { status: 404 });
 }
