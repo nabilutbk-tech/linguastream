@@ -43,7 +43,6 @@ export function VideoPlayer({ src, poster, onTimeUpdate, className }: VideoPlaye
   const { tracks } = useSubtitleStore();
   const video = videoRef.current;
 
-  // Sync play/pause
   useEffect(() => {
     if (!video) return;
     if (isPlaying) {
@@ -65,7 +64,6 @@ export function VideoPlayer({ src, poster, onTimeUpdate, className }: VideoPlaye
     if (video) video.muted = isMuted;
   }, [isMuted, video]);
 
-  // Fungsi fallback: hitung durasi dari subtitle jika video MKV belum scan durasi
   const updateDurationFromSubtitles = useCallback(() => {
     let maxSubTime = 0;
     tracks.forEach((track) => {
@@ -81,11 +79,9 @@ export function VideoPlayer({ src, poster, onTimeUpdate, className }: VideoPlaye
     }
   }, [tracks, setDuration]);
 
-  // Fungsi pintar pemeriksa durasi asli video
   const checkAndSetValidDuration = useCallback(() => {
     if (!video) return;
     const dur = video.duration;
-    // Jika durasi angka valid dan bukan Infinity (khas MKV di awal)
     if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
       setDuration(dur);
     } else {
@@ -98,7 +94,6 @@ export function VideoPlayer({ src, poster, onTimeUpdate, className }: VideoPlaye
     setCurrentTime(video.currentTime);
     onTimeUpdate?.(video.currentTime);
 
-    // Jika durasi sebelumnya masih --:-- atau NaN, periksa lagi saat video diputar
     if (!duration || isNaN(duration) || !isFinite(duration)) {
       checkAndSetValidDuration();
     }
@@ -175,6 +170,7 @@ export function VideoPlayer({ src, poster, onTimeUpdate, className }: VideoPlaye
         onTouchCancel={handleTouchEnd}
         playsInline
         preload="auto"
+        {...({ referrerPolicy: "no-referrer" } as any)}
       />
 
       <SubtitleOverlay currentTime={currentTime} />
