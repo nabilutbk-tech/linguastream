@@ -46,7 +46,11 @@ export function VideoCard({ video }: VideoCardProps) {
             variant="secondary"
             className="absolute top-2 left-2 text-[10px] h-5 bg-background/80 backdrop-blur-sm"
           >
-            {video.sourceType === "telegram" ? "📺 Channel" : "📁 Local"}
+            {video.sourceType === "telegram"
+              ? "📺 Channel"
+              : video.sourceType === "hosted"
+                ? "🐙 Hosted"
+                : "📁 Local"}
           </Badge>
         </div>
 

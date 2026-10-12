@@ -86,3 +86,33 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, series, title, description } = body;
+    if (!id) {
+      return NextResponse.json({ error: "Missing video id" }, { status: 400 });
+    }
+
+    const data: Record<string, unknown> = {};
+    if (typeof series === "string") {
+      data.series = series.trim() ? series.trim() : null;
+    }
+    if (typeof title === "string" && title.trim()) {
+      data.title = title.trim();
+    }
+    if (typeof description === "string") {
+      data.description = description;
+    }
+
+    const video = await prisma.video.update({ where: { id }, data });
+    return NextResponse.json(video);
+  } catch (error) {
+    console.error("Failed to update video:", error);
+    return NextResponse.json(
+      { error: "Failed to update video" },
+      { status: 500 }
+    );
+  }
+}

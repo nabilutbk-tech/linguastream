@@ -13,7 +13,18 @@ export async function GET(
     if (!sub) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (sub.content && sub.content !== "[]") {
-      return NextResponse.json({ entries: JSON.parse(sub.content) });
+      try {
+        return NextResponse.json({ entries: JSON.parse(sub.content) });
+      } catch {
+        // Data lama: content masih teks mentah SRT/ASS, parse langsung lalu perbaiki
+        const entries =
+          sub.format === "ass" ? parseASS(sub.content) : parseSRT(sub.content);
+        await prisma.subtitle.update({
+          where: { id: sub.id },
+          data: { content: JSON.stringify(entries) },
+        });
+        return NextResponse.json({ entries });
+      }
     }
 
     if (sub.sourceType === "telegram" && sub.telegramFileId) {
@@ -44,5 +55,26 @@ export async function GET(
   } catch (error) {
     console.error("Fetch subtitle error:", error);
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    const existing = await prisma.subtitle.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    await prisma.subtitle.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete subtitle error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete subtitle" },
+      { status: 500 }
+    );
   }
 }
